@@ -32,7 +32,7 @@ public final class AccountBook {
         self.storage = storage
         if let data = try storage.load() {
             guard let file = try? JSONDecoder().decode(File.self, from: data) else {
-                throw OtpError("Dữ liệu tài khoản trong Keychain bị hỏng")
+                throw OtpError(L("The account data in the Keychain is damaged"))
             }
             accounts = file.accounts
         } else {
@@ -48,7 +48,7 @@ public final class AccountBook {
     private static func cleanNames(_ issuer: String, _ name: String, _ group: String) throws -> (String, String, String) {
         let trim = { (s: String) in s.trimmingCharacters(in: .whitespacesAndNewlines) }
         let clean = (trim(issuer), trim(name), trim(group))
-        if clean.0.isEmpty && clean.1.isEmpty { throw OtpError("Nhập tên tài khoản") }
+        if clean.0.isEmpty && clean.1.isEmpty { throw OtpError(L("Enter an account name")) }
         return clean
     }
 
@@ -56,10 +56,10 @@ public final class AccountBook {
         let (issuer, name, group) = try Self.cleanNames(draft.issuer, draft.name, draft.group)
         let secret = try Base32.checkSecret(draft.secret)
         guard [6, 7, 8].contains(draft.digits), draft.period > 0 else {
-            throw OtpError("Số chữ số hoặc chu kỳ chưa hỗ trợ")
+            throw OtpError(L("Unsupported number of digits or period"))
         }
         if let twin = list.first(where: { $0.secret == secret }) {
-            throw OtpError("Khóa này đã có trong danh sách: \(twin.label)")
+            throw OtpError(L("This key is already in the list: %@", twin.label))
         }
         return Account(issuer: issuer, name: name, group: group, secret: secret,
                        digits: draft.digits, period: draft.period, algorithm: draft.algorithm)
@@ -73,7 +73,7 @@ public final class AccountBook {
     }
 
     public func update(_ id: UUID, issuer: String, name: String, group: String) throws {
-        guard let index = accounts.firstIndex(where: { $0.id == id }) else { throw OtpError("Không tìm thấy tài khoản") }
+        guard let index = accounts.firstIndex(where: { $0.id == id }) else { throw OtpError(L("Account not found")) }
         var next = accounts
         (next[index].issuer, next[index].name, next[index].group) = try Self.cleanNames(issuer, name, group)
         try save(next)

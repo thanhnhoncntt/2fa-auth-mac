@@ -23,7 +23,7 @@ public struct Account: Codable, Identifiable, Equatable, Sendable {
         self.algorithm = algorithm
     }
 
-    /// "Google (alex@gmail.com)", or whichever of the two names exists.
+    /// "Google (alex@example.com)", or whichever of the two names exists.
     public var label: String { !issuer.isEmpty && !name.isEmpty ? "\(issuer) (\(name))" : issuer.isEmpty ? name : issuer }
 
     /// What the list shows: the account name, or the service name when there is no account name.

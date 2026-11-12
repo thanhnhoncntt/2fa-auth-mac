@@ -31,13 +31,13 @@ public enum Backup {
     }
 
     public static func encrypt(_ accounts: [Account], password: String, iterations: Int = defaultIterations) throws -> Data {
-        guard password.count >= minPasswordLength else { throw OtpError("Mật khẩu cần ít nhất \(minPasswordLength) ký tự") }
+        guard password.count >= minPasswordLength else { throw OtpError(L("The password needs at least %ld characters", minPasswordLength)) }
         var salt = Data(count: 16)
         let status = salt.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }
-        guard status == errSecSuccess else { throw OtpError("Không tạo được file sao lưu") }
+        guard status == errSecSuccess else { throw OtpError(L("Could not create the backup file")) }
         let key = try deriveKey(password, salt: salt, iterations: iterations)
         let plain = try JSONEncoder().encode(Payload(accounts: accounts))
-        guard let sealed = try AES.GCM.seal(plain, using: key).combined else { throw OtpError("Không tạo được file sao lưu") }
+        guard let sealed = try AES.GCM.seal(plain, using: key).combined else { throw OtpError(L("Could not create the backup file")) }
         let file = File(iterations: iterations, salt: salt.base64EncodedString(), data: sealed.base64EncodedString())
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -48,15 +48,15 @@ public enum Backup {
         guard let file = try? JSONDecoder().decode(File.self, from: data), file.format == format,
               let salt = Data(base64Encoded: file.salt), let sealed = Data(base64Encoded: file.data),
               file.iterations > 0 else {
-            throw OtpError("File này không phải file sao lưu của 2FA Auth")
+            throw OtpError(L("This is not a 2FA Auth backup file"))
         }
         guard file.version == 1, file.kdf == "pbkdf2-sha256" else {
-            throw OtpError("File sao lưu này do bản 2FA Auth mới hơn tạo, hãy cập nhật app")
+            throw OtpError(L("This backup was made by a newer 2FA Auth; update the app"))
         }
         let key = try deriveKey(password, salt: salt, iterations: file.iterations)
         guard let box = try? AES.GCM.SealedBox(combined: sealed), let plain = try? AES.GCM.open(box, using: key),
               let payload = try? JSONDecoder().decode(Payload.self, from: plain) else {
-            throw OtpError("Sai mật khẩu, hoặc file sao lưu bị hỏng")
+            throw OtpError(L("Wrong password, or the backup file is damaged"))
         }
         return payload.accounts.map {
             AccountDraft(issuer: $0.issuer, name: $0.name, group: $0.group, secret: $0.secret,
@@ -72,7 +72,7 @@ public enum Backup {
                                  saltBytes.bindMemory(to: UInt8.self).baseAddress, salt.count,
                                  CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256), UInt32(iterations), &key, key.count)
         }
-        guard status == kCCSuccess else { throw OtpError("Không tạo được khóa từ mật khẩu") }
+        guard status == kCCSuccess else { throw OtpError(L("Could not derive a key from the password")) }
         defer { _ = key.withUnsafeMutableBytes { memset_s($0.baseAddress, $0.count, 0, $0.count) } }
         return SymmetricKey(data: key)
     }

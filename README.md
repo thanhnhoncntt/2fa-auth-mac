@@ -1,58 +1,68 @@
-# 2FA Auth cho macOS
+# 2FA Auth for macOS
 
-Phiên bản **0.1** · macOS 14 trở lên.
+**English** · [Tiếng Việt](README.vi.md)
 
-App nhỏ có cửa sổ riêng và icon trên Dock, tạo mã 2FA như app Authenticator. Quét được mã QR ở **bất kỳ đâu
-trên màn hình**: mọi profile Chrome, Safari, Telegram, ảnh trong Preview...
+Version **0.2** · macOS 14 or later · English and Vietnamese.
 
-## Dùng
+A small Mac app that makes 2FA codes like an authenticator app. It scans QR codes from **anywhere on screen**:
+any Chrome profile, Safari, a chat app, an image in Preview...
 
-| Việc | Cách |
+## Use
+
+| Task | How |
 |---|---|
-| Mở cửa sổ | Bấm icon trên Dock, icon 🔐 trên thanh menu, hoặc **⌥⇧A** ở bất kỳ đâu (bấm lần nữa để ẩn). Đóng cửa sổ (⌘W) app vẫn chạy để giữ phím tắt; ⌘Q để thoát |
-| Copy mã | Bấm vào dòng. Hoặc gõ vài chữ để tìm rồi **Enter** (copy dòng đầu). Mã tự xoá khỏi clipboard sau 30 giây |
-| Quét QR | **⌥⇧Q**, hoặc **+ → Quét mã QR trên màn hình**. Cửa sổ tạm ẩn, kéo khung quanh mã QR như ⌘⇧4. `Esc` để huỷ |
-| Nhập khóa tay | **+ → Nhập khóa thiết lập** |
-| Lọc theo nhóm | Bấm chip nhóm dưới ô tìm |
-| Sửa / xoá | Chuột phải vào dòng. Form chỉ có tên tài khoản và nhóm; tên dịch vụ đọc từ QR được giữ và hiện chữ nhỏ dưới mã |
-| Tự mở khi bật máy | **+ → Mở khi đăng nhập** |
+| Open the window | Click the Dock icon or the 🔐 menu bar icon, or press **⌥⇧A** anywhere (again to hide). Closing the window (⌘W) keeps the app running for the shortcuts; ⌘Q quits |
+| Copy a code | Click its row. Or type a few letters to search, then **Enter** (copies the first row). Copied codes are cleared from the clipboard after 30 seconds |
+| Scan a QR code | **⌥⇧Q** or the **Scan QR** button. The window steps aside; drag a box around the QR code like ⌘⇧4. `Esc` cancels |
+| Type a setup key | **Enter Key** button |
+| Filter by group | Click a group chip under the search field |
+| Edit / delete | Right-click a row. The service name read from a QR code is kept and shown in small type under the code |
+| Open at login | **⋯ → Open at Login** |
+| Language | **⋯ → Language**: System Default / English / Tiếng Việt (the app restarts) |
+| Quick menu | Right-click the menu bar icon: version, open, scan, back up, restore, quit |
 
-Lần quét đầu tiên, macOS hỏi quyền **Ghi màn hình**: bật cho 2FA Auth trong Cài đặt hệ thống → Quyền riêng tư &
-Bảo mật → Ghi màn hình, rồi mở lại app.
+On the first scan macOS asks for **Screen Recording** permission: turn it on for 2FA Auth in System Settings →
+Privacy & Security → Screen Recording, then reopen the app.
 
-## Sao lưu và khôi phục
+## Back up and restore
 
-- **Sao lưu:** ⋯ → **Sao lưu…** (hoặc ⌘S), đặt mật khẩu (ít nhất 8 ký tự), chọn nơi lưu. File `.json` được mã hoá
-  AES-256-GCM, khoá tạo từ mật khẩu bằng PBKDF2-SHA256 (600.000 vòng, salt ngẫu nhiên), nên có thể để trong iCloud Drive
-  hay USB. **Quên mật khẩu là không mở được file**, kể cả bằng app.
-- **Khôi phục:** ⋯ → **Khôi phục…** (hoặc ⌘O), chọn file, nhập mật khẩu. Tài khoản được gộp vào danh sách hiện có;
-  tài khoản trùng khóa được bỏ qua, không xoá gì.
+- **Back up:** ⋯ → **Back Up…** (or ⌘S), set a password (8+ characters), choose where to save. The `.json` file is
+  sealed with AES-256-GCM under a key derived from the password with PBKDF2-SHA256 (600,000 rounds, random salt),
+  so it is fine in iCloud Drive or on a USB stick. **Forget the password and nobody can open the file**, not even the app.
+- **Restore:** ⋯ → **Restore…** (or ⌘O), pick the file, type the password. Accounts are merged into your list;
+  ones with a key you already have are skipped, and nothing is deleted.
 
-## Bảo mật
+## Security
 
-- Khóa nằm trong **Keychain** (login keychain, chỉ máy này), một mục tên "2FA Auth – tài khoản". Không đồng bộ, không gọi mạng.
-- Ảnh chụp khi quét chỉ nằm trong thư mục tạm riêng của user và bị xoá ngay sau khi đọc mã.
-- Mã copy được đánh dấu "concealed" để các app quản lý clipboard bỏ qua.
+**Optional, off by default:** ⋯ → **Lock with Touch ID**. When on, codes show only after Touch ID (or your Mac
+password); the app locks again after 5 minutes away, when the screen locks or when the Mac sleeps. Turning on
+**FileVault** (System Settings → Privacy & Security) encrypts the whole disk as well.
+
+- Keys live in the **login Keychain** on this Mac only, as one item of service `local.twofa-auth`. No sync, no network.
+- The screenshot taken for a scan sits in the user's private temp folder and is deleted right after the code is read.
+- Copied codes are marked "concealed" so clipboard managers skip them.
 
 ## Build
 
 ```sh
-swift test                      # test phần lõi: Base32, TOTP (RFC 4226/6238), otpauth, danh sách, nhập
-./scripts/build-app.sh          # tạo build/2FA Auth.app
-./scripts/build-app.sh --install  # cài vào ~/Applications, mở lại, xoá bản build
-./scripts/build-app.sh --zip      # đóng gói dist/2FA-Auth-<phiên bản>.zip
-./scripts/build-app.sh && "build/2FA Auth.app/Contents/MacOS/TwoFAAuth" --demo  # thử giao diện với tài khoản giả, không đụng Keychain
+swift test                        # Base32, TOTP (RFC 4226/6238), otpauth, account list, backups, translations
+./scripts/build-app.sh            # builds build/2FA Auth.app
+./scripts/build-app.sh --install  # installs to ~/Applications, restarts it, removes the build copy
+./scripts/build-app.sh --zip      # packages dist/2FA-Auth-<version>.zip
+./scripts/build-app.sh && "build/2FA Auth.app/Contents/MacOS/TwoFAAuth" --demo  # try the UI on made-up accounts, Keychain untouched
 ```
 
-Icon app: `swift scripts/make-icon.swift . && iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns`.
-Script ký bằng chứng chỉ Apple Development nếu có, nên quyền Keychain và Ghi màn hình được giữ qua các lần build.
+The script signs with your Apple Development certificate when you have one, so Keychain and Screen Recording
+permissions survive rebuilds; otherwise it signs ad hoc. App icon:
+`swift scripts/make-icon.swift . && iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns`.
 
-| Đường dẫn | Vai trò |
+| Path | Role |
 |---|---|
-| `Sources/TwoFACore/` | Logic thuần, có test: `OTP.swift`, `Otpauth.swift` (đọc link QR), `Account.swift`, `AccountBook.swift`, `Backup.swift` (file sao lưu mã hoá) |
-| `Sources/TwoFAAuth/AppDelegate.swift` | Cửa sổ, icon thanh menu, menu chuẩn, phím tắt |
-| `Sources/TwoFAAuth/AppModel.swift` | Trạng thái giao diện: copy, form, quét, sao lưu |
-| `Sources/TwoFAAuth/Views.swift` | Giao diện SwiftUI |
-| `Sources/TwoFAAuth/ScreenScanner.swift` | Chọn vùng bằng `screencapture -i`, đọc QR bằng Vision |
-| `Sources/TwoFAAuth/KeychainStorage.swift` | Lưu danh sách vào Keychain |
-| `Sources/TwoFAAuth/HotKeys.swift` | Phím tắt toàn hệ thống (Carbon, không cần quyền Trợ năng) |
+| `Sources/TwoFACore/` | Pure logic with tests: `OTP.swift`, `Otpauth.swift` (QR links), `Account.swift`, `AccountBook.swift`, `Backup.swift` (encrypted backups), `AutoLock.swift` |
+| `Sources/TwoFAAuth/AppDelegate.swift` | Window, menu bar icon, menus, shortcuts |
+| `Sources/TwoFAAuth/AppModel.swift` | UI state: copy, forms, scan, backups, lock, language |
+| `Sources/TwoFAAuth/Views.swift` | SwiftUI views |
+| `Sources/TwoFAAuth/ScreenScanner.swift` | Region pick with `screencapture -i`, QR reading with Vision |
+| `Sources/TwoFAAuth/KeychainStorage.swift` | Keychain storage |
+| `Sources/TwoFAAuth/HotKeys.swift` | Global shortcuts (Carbon, no Accessibility permission needed) |
+| `Resources/vi.lproj/Localizable.strings` | Vietnamese. English source strings live in the code as `L("…")`; a test checks every one is translated |

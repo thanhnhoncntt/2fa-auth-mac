@@ -10,17 +10,17 @@ public enum Otpauth {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = raw.lowercased()
         if lower.hasPrefix("otpauth-migration:") {
-            throw OtpError("Đây là mã QR chuyển tài khoản của Google Authenticator, chưa hỗ trợ nhập")
+            throw OtpError(L("This is a Google Authenticator transfer QR code, which is not supported yet"))
         }
-        guard lower.hasPrefix("otpauth://") else { throw OtpError("Mã QR này không phải mã 2FA") }
+        guard lower.hasPrefix("otpauth://") else { throw OtpError(L("This QR code is not a 2FA code")) }
         // Some sites put raw spaces in the label.
         guard let url = URLComponents(string: raw.replacingOccurrences(of: " ", with: "%20")) else {
-            throw OtpError("Mã QR 2FA bị lỗi định dạng")
+            throw OtpError(L("This 2FA QR code is malformed"))
         }
         switch url.host?.lowercased() {
         case "totp": break
-        case "hotp": throw OtpError("Chưa hỗ trợ mã theo bộ đếm (HOTP), chỉ hỗ trợ mã theo thời gian")
-        default: throw OtpError("Mã QR 2FA bị lỗi định dạng")
+        case "hotp": throw OtpError(L("Counter-based codes (HOTP) are not supported, only time-based ones"))
+        default: throw OtpError(L("This 2FA QR code is malformed"))
         }
 
         var params: [String: String] = [:]
@@ -32,7 +32,7 @@ public enum Otpauth {
         let period = Int(params["period"] ?? "30")
         let algorithm = Algorithm(rawValue: (params["algorithm"] ?? "SHA1").uppercased())
         guard let digits, [6, 7, 8].contains(digits), let period, period > 0, let algorithm else {
-            throw OtpError("Mã QR 2FA dùng số chữ số, chu kỳ hoặc thuật toán chưa hỗ trợ")
+            throw OtpError(L("This 2FA QR code uses an unsupported number of digits, period or algorithm"))
         }
 
         // The label is "Issuer:account" or just "account"; the issuer parameter wins over the prefix.

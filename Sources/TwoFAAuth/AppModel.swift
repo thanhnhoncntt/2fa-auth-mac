@@ -1,6 +1,7 @@
 // UI state for the window. Secrets stay in the Keychain and in memory: never log them, and never show a key
 // again once its account is saved.
 import AppKit
+import LocalAuthentication
 import ServiceManagement
 import SwiftUI
 import TwoFACore
@@ -52,6 +53,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var toast: Toast?
     @Published private(set) var loadError: String?
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
+    /// Optional lock (off by default): Touch ID or the Mac password before the codes show.
+    @Published private(set) var lockEnabled = UserDefaults.standard.bool(forKey: AppModel.lockKey)
+    @Published private(set) var isLocked = UserDefaults.standard.bool(forKey: AppModel.lockKey)
+    private var autoLock = AutoLock(after: 5 * 60)
+    private var unlocking = false
+    private static let lockKey = "lockWithTouchID"
     /// Bumped every time the window comes up, so the search field can take focus again.
     @Published private(set) var openCount = 0
 
@@ -73,7 +80,7 @@ final class AppModel: ObservableObject {
     }
 
     private static func message(_ error: Error) -> String {
-        (error as? OtpError)?.message ?? "Có lỗi, thử lại"
+        (error as? OtpError)?.message ?? L("Something went wrong, try again")
     }
 
     var visible: [Account] {
@@ -91,7 +98,57 @@ final class AppModel: ObservableObject {
 
     func willShow() {
         if screen == .list { query = "" }
+        cameBack()
         openCount += 1
+    }
+
+    // MARK: optional lock
+
+    /// The user switched away from the app; it locks if they stay away 5 minutes.
+    func wentAway() { autoLock.left(at: Date()) }
+
+    func cameBack() {
+        if lockEnabled && autoLock.isExpired(at: Date()) { isLocked = true }
+        autoLock.returned()
+    }
+
+    /// Screen locked or Mac going to sleep.
+    func lockNow() {
+        if lockEnabled { isLocked = true }
+    }
+
+    func unlock() {
+        guard isLocked, !unlocking else { return }
+        unlocking = true
+        Task {
+            let ok = await Self.authenticate(L("unlock and show your 2FA codes"))
+            unlocking = false
+            if ok { isLocked = false }
+        }
+    }
+
+    func setLockEnabled(_ on: Bool) {
+        guard on else {
+            lockEnabled = false
+            isLocked = false
+            UserDefaults.standard.set(false, forKey: Self.lockKey)
+            return
+        }
+        Task {
+            // Check it works on this Mac before relying on it.
+            guard await Self.authenticate(L("turn on the Touch ID lock")) else { return }
+            lockEnabled = true
+            UserDefaults.standard.set(true, forKey: Self.lockKey)
+            showToast(L("Lock is on. The app locks after 5 minutes away, when the screen locks or when the Mac sleeps."), seconds: 5)
+        }
+    }
+
+    /// Touch ID, or the Mac password when there is no Touch ID or it fails.
+    private static func authenticate(_ reason: String) async -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return false }
+        return (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
     }
 
     // MARK: toast
@@ -157,10 +214,10 @@ final class AppModel: ObservableObject {
                 draft.name = form.name
                 draft.group = form.group
                 let account = try book.add(draft)
-                showToast("Đã thêm \(account.label)")
+                showToast(L("Added %@", account.label))
             case .edit(let id):
                 try book.update(id, issuer: form.issuer, name: form.name, group: form.group)
-                showToast("Đã lưu")
+                showToast(L("Saved"))
             }
             accounts = book.accounts
             cancelForm()
@@ -176,7 +233,7 @@ final class AppModel: ObservableObject {
             accounts = book.accounts
             if let filter = groupFilter, !groups.contains(filter) { groupFilter = nil }
             cancelForm()
-            showToast("Đã xóa \(account.label)")
+            showToast(L("Deleted %@", account.label))
         } catch {
             pendingDelete = nil
             showToast(Self.message(error), error: true)
@@ -191,7 +248,7 @@ final class AppModel: ObservableObject {
                 ScreenScanner.requestPermission()
                 screen = .list
                 showWindow()
-                showToast("Cần quyền Ghi màn hình: bật 2FA Auth trong Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Ghi màn hình, rồi mở lại app.",
+                showToast(L("Screen Recording permission needed: turn on 2FA Auth in System Settings → Privacy & Security → Screen Recording, then reopen the app."),
                           error: true, seconds: 15, opensPermissionSettings: true)
                 return
             }
@@ -203,7 +260,7 @@ final class AppModel: ObservableObject {
             guard let image else { return } // Esc
             let texts = ScreenScanner.readQRCodes(in: image)
             guard let text = texts.first(where: Otpauth.isOtpauth) ?? texts.first else {
-                showToast("Không thấy mã QR trong vùng đã chọn. Thử kéo khung rộng hơn một chút.", error: true, seconds: 5)
+                showToast(L("No QR code in the selected area. Try a slightly larger box."), error: true, seconds: 5)
                 return
             }
             useQr(text)
@@ -214,7 +271,7 @@ final class AppModel: ObservableObject {
         do {
             let draft = try Otpauth.parse(text)
             if let twin = accounts.first(where: { $0.secret == draft.secret }) {
-                showToast("Tài khoản này đã có trong danh sách: \(twin.label)", error: true, seconds: 5)
+                showToast(L("This account is already in the list: %@", twin.label), error: true, seconds: 5)
                 return
             }
             // Only the account name is shown; the service name from the QR is kept to tell same-email accounts apart.
@@ -225,16 +282,16 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func summary(_ result: ImportResult, verb: String) -> String {
-        let skipped = result.skipped > 0 ? ", bỏ qua \(result.skipped) (đã có hoặc bị lỗi)" : ""
-        return "\(verb) \(result.added) tài khoản\(skipped)"
+    private static func summary(_ result: ImportResult) -> String {
+        let skipped = result.skipped > 0 ? L(", skipped %ld (already there or invalid)", result.skipped) : ""
+        return L("Restored %ld accounts", result.added) + skipped
     }
 
     // MARK: backup and restore
 
     func startBackup() {
         guard !accounts.isEmpty else {
-            showToast("Chưa có tài khoản nào để sao lưu", error: true)
+            showToast(L("No accounts to back up yet"), error: true)
             return
         }
         backup = BackupState()
@@ -244,7 +301,7 @@ final class AppModel: ObservableObject {
     /// Encrypts with the typed password, then asks where to save. The file only ever holds the sealed list.
     func saveBackup() {
         guard backup.password == backup.confirm else {
-            backup.error = "Hai mật khẩu chưa giống nhau"
+            backup.error = L("The two passwords do not match")
             return
         }
         let (snapshot, password) = (accounts, backup.password)
@@ -259,17 +316,17 @@ final class AppModel: ObservableObject {
                 return
             }
             let panel = NSSavePanel()
-            panel.title = "Lưu file sao lưu 2FA Auth"
+            panel.title = L("Save 2FA Auth Backup")
             panel.allowedContentTypes = [.json]
-            panel.nameFieldStringValue = "2FA Auth sao lưu \(Date().formatted(.iso8601.year().month().day())).json"
+            panel.nameFieldStringValue = L("2FA Auth backup %@.json", Date().formatted(.iso8601.year().month().day()))
             guard panel.runModal() == .OK, let url = panel.url else { return }
             do {
                 try data.write(to: url, options: .atomic)
                 try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
                 cancelBackup()
-                showToast("Đã sao lưu \(snapshot.count) tài khoản vào \(url.lastPathComponent)", seconds: 5)
+                showToast(L("Backed up %ld accounts to %@", snapshot.count, url.lastPathComponent), seconds: 5)
             } catch {
-                backup.error = "Không ghi được file vào chỗ này"
+                backup.error = L("Could not write the file here")
             }
         }
     }
@@ -277,16 +334,16 @@ final class AppModel: ObservableObject {
     /// Opens a backup file; the password screen comes next.
     func startRestore() {
         let panel = NSOpenPanel()
-        panel.title = "Chọn file sao lưu 2FA Auth"
+        panel.title = L("Choose a 2FA Auth Backup")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard let data = try? Data(contentsOf: url) else {
-            showToast("Không đọc được file này", error: true)
+            showToast(L("Could not read this file"), error: true)
             return
         }
         guard Backup.isEncrypted(data) else {
-            showToast("File này không phải file sao lưu của 2FA Auth", error: true, seconds: 5)
+            showToast(L("This is not a 2FA Auth backup file"), error: true, seconds: 5)
             return
         }
         restoreFile = data
@@ -307,7 +364,7 @@ final class AppModel: ObservableObject {
                 let imported = try book.importDrafts(try result.get())
                 accounts = book.accounts
                 cancelBackup()
-                showToast(Self.summary(imported, verb: "Đã khôi phục"), seconds: 5)
+                showToast(Self.summary(imported), seconds: 5)
             } catch {
                 backup.error = Self.message(error)
             }
@@ -322,11 +379,30 @@ final class AppModel: ObservableObject {
 
     // MARK: settings
 
+    /// The app's own language choice: nil follows macOS, otherwise "en" or "vi".
+    var language: String? {
+        let domain = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "") ?? [:]
+        return (domain["AppleLanguages"] as? [String])?.first
+    }
+
+    /// Saves the choice and restarts the app, since macOS reads the language only at launch.
+    func setLanguage(_ code: String?) {
+        guard code != language else { return }
+        if let code { UserDefaults.standard.set([code], forKey: "AppleLanguages") }
+        else { UserDefaults.standard.removeObject(forKey: "AppleLanguages") }
+        UserDefaults.standard.synchronize()
+        let relaunch = Process()
+        relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunch.arguments = ["-c", "sleep 0.7; /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        try? relaunch.run()
+        NSApp.terminate(nil)
+    }
+
     func setLaunchAtLogin(_ on: Bool) {
         do {
             if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         } catch {
-            showToast("Không đổi được mục Mở khi đăng nhập", error: true)
+            showToast(L("Could not change Open at Login"), error: true)
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

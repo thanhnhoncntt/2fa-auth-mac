@@ -66,12 +66,12 @@ final class OtpTests: XCTestCase {
     func testCheckSecretNormalizesAndRejectsWithSafeMessages() throws {
         XCTAssertEqual(try Base32.checkSecret(" gezd gnbv-gy3t qojq gezd gnbv gy3t qojq== "), rfcSecretB32)
         XCTAssertEqual(try Base32.decode(rfcSecretB32), Data(rfcSecret))
-        XCTAssertThrowsError(try Base32.checkSecret("")) { XCTAssertEqual(($0 as? OtpError)?.message, "Chưa nhập khóa") }
+        XCTAssertThrowsError(try Base32.checkSecret("")) { XCTAssertEqual(($0 as? OtpError)?.message, "Enter a key") }
         XCTAssertThrowsError(try Base32.checkSecret("ABCDEFGH1JKLMNOP")) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Khóa chỉ gồm chữ A–Z và số 2–7")
+            XCTAssertEqual(($0 as? OtpError)?.message, "A key only has the letters A–Z and the digits 2–7")
         }
         XCTAssertThrowsError(try Base32.checkSecret("ABCDEFGH")) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Khóa quá ngắn, cần ít nhất 16 ký tự")
+            XCTAssertEqual(($0 as? OtpError)?.message, "The key is too short; it needs at least 16 characters")
         }
     }
 }
@@ -95,12 +95,12 @@ final class OtpauthTests: XCTestCase {
     func testUnsupportedOrBrokenContentsGiveMessagesWithoutTheKey() {
         let secret = randomSecret()
         let cases: [(String, String)] = [
-            ("https://example.com", "Mã QR này không phải mã 2FA"),
-            ("otpauth-migration://offline?data=abc", "Đây là mã QR chuyển tài khoản của Google Authenticator, chưa hỗ trợ nhập"),
-            ("otpauth://hotp/x?secret=\(secret)&counter=1", "Chưa hỗ trợ mã theo bộ đếm (HOTP), chỉ hỗ trợ mã theo thời gian"),
-            ("otpauth://totp/x?secret=\(secret)&digits=9", "Mã QR 2FA dùng số chữ số, chu kỳ hoặc thuật toán chưa hỗ trợ"),
-            ("otpauth://totp/x?secret=\(secret)&algorithm=MD5", "Mã QR 2FA dùng số chữ số, chu kỳ hoặc thuật toán chưa hỗ trợ"),
-            ("otpauth://totp/x?secret=ABC", "Khóa quá ngắn, cần ít nhất 16 ký tự"),
+            ("https://example.com", "This QR code is not a 2FA code"),
+            ("otpauth-migration://offline?data=abc", "This is a Google Authenticator transfer QR code, which is not supported yet"),
+            ("otpauth://hotp/x?secret=\(secret)&counter=1", "Counter-based codes (HOTP) are not supported, only time-based ones"),
+            ("otpauth://totp/x?secret=\(secret)&digits=9", "This 2FA QR code uses an unsupported number of digits, period or algorithm"),
+            ("otpauth://totp/x?secret=\(secret)&algorithm=MD5", "This 2FA QR code uses an unsupported number of digits, period or algorithm"),
+            ("otpauth://totp/x?secret=ABC", "The key is too short; it needs at least 16 characters"),
         ]
         for (text, message) in cases {
             XCTAssertThrowsError(try Otpauth.parse(text)) { error in
@@ -122,10 +122,10 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(added.group, "Công việc")
         XCTAssertEqual(added.secret, secret)
         XCTAssertThrowsError(try book.add(AccountDraft(issuer: "Other", secret: secret))) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Khóa này đã có trong danh sách: GitHub (alex)")
+            XCTAssertEqual(($0 as? OtpError)?.message, "This key is already in the list: GitHub (alex)")
         }
         XCTAssertThrowsError(try book.add(AccountDraft(secret: randomSecret()))) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Nhập tên tài khoản")
+            XCTAssertEqual(($0 as? OtpError)?.message, "Enter an account name")
         }
         XCTAssertEqual(try AccountBook(storage: storage).accounts, [added], "a fresh load sees the saved list")
     }
@@ -134,7 +134,7 @@ final class AccountBookTests: XCTestCase {
         let storage = InMemoryStorage()
         let book = try AccountBook(storage: storage)
         let account = try book.add(AccountDraft(issuer: "Google", name: "a", secret: randomSecret()))
-        try book.update(account.id, issuer: "Gmail", name: "b", group: "Cá nhân")
+        try book.update(account.id, issuer: "Gmail", name: "b", group: "Personal")
         XCTAssertEqual(book.accounts[0].issuer, "Gmail")
         XCTAssertEqual(book.accounts[0].secret, account.secret)
         try book.remove(account.id)

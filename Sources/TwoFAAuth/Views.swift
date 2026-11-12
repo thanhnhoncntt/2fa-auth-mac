@@ -6,11 +6,15 @@ struct ContentView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            switch model.screen {
-            case .list: ListScreen()
-            case .form: FormScreen()
-            case .backup: BackupScreen(restoring: false)
-            case .restore: BackupScreen(restoring: true)
+            if model.isLocked {
+                LockScreen()
+            } else {
+                switch model.screen {
+                case .list: ListScreen()
+                case .form: FormScreen()
+                case .backup: BackupScreen(restoring: false)
+                case .restore: BackupScreen(restoring: true)
+                }
             }
             if let toast = model.toast {
                 ToastView(toast: toast).padding(12)
@@ -40,11 +44,11 @@ private struct ListScreen: View {
 
             if let error = model.loadError {
                 Message(icon: "exclamationmark.triangle", title: error,
-                        detail: "Mở lại app. Nếu macOS hỏi quyền dùng Keychain, chọn Luôn cho phép.")
+                        detail: L("Reopen the app. If macOS asks for Keychain access, choose Always Allow."))
             } else if model.accounts.isEmpty {
                 EmptyState()
             } else if model.visible.isEmpty {
-                Message(icon: "magnifyingglass", title: "Không có tài khoản nào khớp", detail: nil)
+                Message(icon: "magnifyingglass", title: L("No matching accounts"), detail: nil)
             } else {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     ScrollView {
@@ -70,33 +74,43 @@ private struct Toolbar: View {
     var body: some View {
         HStack(spacing: 8) {
             Button { model.scanScreen() } label: {
-                Label("Quét QR", systemImage: "qrcode.viewfinder")
+                Label(L("Scan QR"), systemImage: "qrcode.viewfinder")
             }
             .buttonStyle(.borderedProminent)
-            .help("Kéo chọn vùng có mã QR ở bất kỳ đâu trên màn hình (⌥⇧Q)")
+            .help(L("Drag a box around a QR code anywhere on screen (⌥⇧Q)"))
 
             Button { model.startAdd() } label: {
-                Label("Nhập khóa", systemImage: "keyboard")
+                Label(L("Enter Key"), systemImage: "keyboard")
             }
             .buttonStyle(.bordered)
-            .help("Nhập khóa thiết lập trang web đưa ra (⌘N)")
+            .help(L("Type the setup key a website gives you (⌘N)"))
 
             Spacer()
 
             Menu {
-                Button("Sao lưu…") { model.startBackup() }
-                Button("Khôi phục…") { model.startRestore() }
+                Button(L("Back Up…")) { model.startBackup() }
+                Button(L("Restore…")) { model.startRestore() }
                 Divider()
-                Toggle("Mở khi đăng nhập", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
+                Menu(L("Language")) {
+                    languageButton(L("System Default"), code: nil)
+                    languageButton("English", code: "en")
+                    languageButton("Tiếng Việt", code: "vi")
+                }
+                Toggle(L("Lock with Touch ID"), isOn: Binding(get: { model.lockEnabled }, set: { model.setLockEnabled($0) }))
+                Toggle(L("Open at Login"), isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
             } label: {
                 Image(systemName: "ellipsis.circle").font(.system(size: 15))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Thêm")
+            .help(L("More"))
         }
         .controlSize(.large)
+    }
+
+    private func languageButton(_ title: String, code: String?) -> some View {
+        Button((model.language == code ? "✓ " : "") + title) { model.setLanguage(code) }
     }
 }
 
@@ -107,7 +121,7 @@ private struct SearchField: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Tìm tài khoản · Enter để copy", text: $model.query)
+            TextField(L("Search accounts · Enter to copy"), text: $model.query)
                 .textFieldStyle(.plain)
                 .focused(focused)
                 .onSubmit { if let first = model.visible.first { model.copy(first) } }
@@ -128,7 +142,7 @@ private struct GroupChips: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                chip("Tất cả", group: nil)
+                chip(L("All"), group: nil)
                 ForEach(model.groups, id: \.self) { chip($0, group: $0) }
             }
         }
@@ -172,7 +186,7 @@ private struct AccountRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(account.title).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                     if copied {
-                        Label("Đã copy", systemImage: "checkmark.circle.fill")
+                        Label(L("Copied"), systemImage: "checkmark.circle.fill")
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(.green)
                     } else {
@@ -203,12 +217,12 @@ private struct AccountRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Bấm để copy mã")
+        .help(L("Click to copy the code"))
         .contextMenu {
-            Button("Copy mã") { model.copy(account) }
-            Button("Sửa…") { model.startEdit(account) }
+            Button(L("Copy Code")) { model.copy(account) }
+            Button(L("Edit…")) { model.startEdit(account) }
             Divider()
-            Button("Xóa…", role: .destructive) { model.pendingDelete = account }
+            Button(L("Delete…"), role: .destructive) { model.pendingDelete = account }
         }
     }
 }
@@ -250,10 +264,10 @@ private struct EmptyState: View {
         VStack(spacing: 10) {
             Spacer()
             Image(systemName: "lock.shield").font(.system(size: 34)).foregroundStyle(.secondary)
-            Text("Chưa có tài khoản").font(.headline)
-            Text("Bấm Quét QR rồi kéo khung quanh mã QR trên màn hình, hoặc Nhập khóa.")
+            Text(L("No accounts yet")).font(.headline)
+            Text(L("Click Scan QR and drag a box around a QR code on screen, or click Enter Key."))
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Khôi phục từ file sao lưu…") { model.startRestore() }.buttonStyle(.link)
+            Button(L("Restore from a Backup File…")) { model.startRestore() }.buttonStyle(.link)
             Spacer()
         }
         .padding(24)
@@ -284,11 +298,11 @@ private struct DeleteBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Xóa \(account.title)? Mã của tài khoản này sẽ mất hẳn.").font(.callout)
+            Text(L("Delete %@? Its codes will be gone for good.", account.title)).font(.callout)
             HStack {
                 Spacer()
-                Button("Hủy") { model.pendingDelete = nil }
-                Button("Xóa", role: .destructive) { model.confirmDelete() }.buttonStyle(.borderedProminent).tint(.red)
+                Button(L("Cancel")) { model.pendingDelete = nil }
+                Button(L("Delete"), role: .destructive) { model.confirmDelete() }.buttonStyle(.borderedProminent).tint(.red)
             }
         }
         .padding(12)
@@ -304,7 +318,7 @@ private struct ToastView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(toast.message).font(.callout).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
             if toast.opensPermissionSettings {
-                Button("Mở Cài đặt") { ScreenScanner.openPermissionSettings() }.controlSize(.small)
+                Button(L("Open Settings")) { ScreenScanner.openPermissionSettings() }.controlSize(.small)
             }
         }
         .padding(.horizontal, 12)
@@ -328,28 +342,28 @@ private struct FormScreen: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Button { model.cancelForm() } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless)
-                Text(isEdit ? "Sửa tài khoản" : "Thêm tài khoản").font(.headline)
+                Text(isEdit ? L("Edit Account") : L("Add Account")).font(.headline)
                 Spacer()
             }
             if model.form.fromQr != nil {
-                Label("Đã đọc mã QR. Kiểm tra lại tên rồi bấm Lưu.", systemImage: "checkmark.circle.fill")
+                Label(L("QR code read. Check the name, then click Save."), systemImage: "checkmark.circle.fill")
                     .font(.callout).foregroundStyle(.green)
             }
-            field("Tài khoản", prompt: "VD: alex@gmail.com", text: $model.form.name).focused($focused)
+            field(L("Account"), prompt: L("e.g. alex@example.com"), text: $model.form.name).focused($focused)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Nhóm (không bắt buộc)").font(.caption).foregroundStyle(.secondary)
+                Text(L("Group (optional)")).font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: 6) {
-                    TextField("", text: $model.form.group, prompt: Text("VD: Công việc")).textFieldStyle(.roundedBorder)
+                    TextField("", text: $model.form.group, prompt: Text(L("e.g. Work"))).textFieldStyle(.roundedBorder)
                     if !model.groups.isEmpty {
                         Menu {
                             ForEach(model.groups, id: \.self) { group in Button(group) { model.form.group = group } }
                         } label: { Image(systemName: "chevron.down") }
-                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help("Chọn nhóm có sẵn")
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().help(L("Pick an existing group"))
                     }
                 }
             }
             if needsKey {
-                field("Khóa thiết lập", prompt: "Chuỗi chữ và số trang web đưa ra", text: $model.form.secret)
+                field(L("Setup key"), prompt: L("Letters and digits from the website"), text: $model.form.secret)
                     .font(.system(.body, design: .monospaced))
             }
             if let error = model.form.error {
@@ -361,14 +375,14 @@ private struct FormScreen: View {
             }
             HStack {
                 if case .edit(let id) = model.form.mode {
-                    Button("Xóa tài khoản", role: .destructive) {
+                    Button(L("Delete Account"), role: .destructive) {
                         model.pendingDelete = model.accounts.first { $0.id == id }
                     }
                     .buttonStyle(.link).foregroundStyle(.red)
                 }
                 Spacer()
-                Button("Hủy") { model.cancelForm() }.keyboardShortcut(.cancelAction)
-                Button("Lưu") { model.saveForm() }.keyboardShortcut(.defaultAction)
+                Button(L("Cancel")) { model.cancelForm() }.keyboardShortcut(.cancelAction)
+                Button(L("Save")) { model.saveForm() }.keyboardShortcut(.defaultAction)
             }
             .controlSize(.large)
         }
@@ -395,20 +409,20 @@ private struct BackupScreen: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Button { model.cancelBackup() } label: { Image(systemName: "chevron.left") }.buttonStyle(.borderless)
-                Text(restoring ? "Khôi phục" : "Sao lưu").font(.headline)
+                Text(restoring ? L("Restore") : L("Back Up")).font(.headline)
                 Spacer()
             }
             if restoring {
                 Label(model.backup.fileName, systemImage: "doc.badge.clock").font(.callout).lineLimit(1)
-                Text("Nhập mật khẩu đã đặt lúc sao lưu. Tài khoản trong file được gộp vào danh sách; tài khoản đã có thì bỏ qua, không xoá gì.")
+                Text(L("Enter the password you set when backing up. Accounts in the file are added to your list; ones already there are skipped, and nothing is deleted."))
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("Sao lưu \(model.accounts.count) tài khoản ra một file được mã hoá bằng mật khẩu này. Quên mật khẩu là không mở được file, kể cả bằng app.")
+                Text(L("Back up %ld accounts to a file encrypted with this password. Forget the password and nobody can open the file, not even this app.", model.accounts.count))
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            secure("Mật khẩu", prompt: "Ít nhất \(Backup.minPasswordLength) ký tự", text: $model.backup.password).focused($focused)
+            secure(L("Password"), prompt: L("At least %ld characters", Backup.minPasswordLength), text: $model.backup.password).focused($focused)
             if !restoring {
-                secure("Nhập lại mật khẩu", prompt: "", text: $model.backup.confirm)
+                secure(L("Repeat password"), prompt: "", text: $model.backup.confirm)
             }
             if let error = model.backup.error {
                 Text(error).font(.callout).foregroundStyle(.red)
@@ -417,8 +431,8 @@ private struct BackupScreen: View {
             HStack {
                 if model.backup.busy { ProgressView().controlSize(.small) }
                 Spacer()
-                Button("Hủy") { model.cancelBackup() }.keyboardShortcut(.cancelAction)
-                Button(restoring ? "Khôi phục" : "Chọn nơi lưu…") {
+                Button(L("Cancel")) { model.cancelBackup() }.keyboardShortcut(.cancelAction)
+                Button(restoring ? L("Restore") : L("Choose Where to Save…")) {
                     if restoring { model.finishRestore() } else { model.saveBackup() }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -435,5 +449,70 @@ private struct BackupScreen: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
             SecureField("", text: text, prompt: Text(prompt)).textFieldStyle(.roundedBorder)
         }
+    }
+}
+
+// MARK: lock
+
+private struct LockScreen: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "lock.fill").font(.system(size: 34)).foregroundStyle(.secondary)
+            Text(L("2FA Auth is locked")).font(.headline)
+            Button { model.unlock() } label: {
+                Label(L("Unlock"), systemImage: "touchid")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+            Text(L("Use Touch ID or your Mac password. Turn the lock off with the ⋯ button."))
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .onAppear { model.unlock() }
+        .onChange(of: model.openCount) { model.unlock() }
+    }
+}
+
+// MARK: menu bar right-click
+
+/// The top of the menu bar icon's right-click menu: name, version and "Bấm để mở". The whole area opens the window.
+struct StatusMenuHeader: View {
+    let version: String
+    let open: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 32, height: 32)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("2FA Auth").font(.system(size: 14, weight: .semibold))
+                    Text(L("Version %@", version)).font(.system(size: 11))
+                        .foregroundStyle(hovering ? Color.white.opacity(0.85) : Color.secondary)
+                }
+                Spacer(minLength: 16)
+                Text(L("Click to open"))
+                    .font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(hovering ? Color.white.opacity(0.22) : Color.primary.opacity(0.1)))
+            }
+            .foregroundStyle(hovering ? Color.white : Color.primary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 7).fill(hovering ? Color.accentColor : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .frame(width: 270)
     }
 }

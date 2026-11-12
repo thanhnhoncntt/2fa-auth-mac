@@ -7,7 +7,7 @@ final class BackupTests: XCTestCase {
 
     private func sample() throws -> [Account] {
         let book = try AccountBook(storage: InMemoryStorage())
-        try book.add(AccountDraft(issuer: "GitHub", name: "alex", group: "Công việc", secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"))
+        try book.add(AccountDraft(issuer: "GitHub", name: "alex", group: "Work", secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"))
         try book.add(AccountDraft(issuer: "Bank", name: "a", secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", digits: 8, period: 60, algorithm: .SHA256))
         return book.accounts
     }
@@ -29,7 +29,7 @@ final class BackupTests: XCTestCase {
     func testWrongPasswordOrTamperingIsRejected() throws {
         let file = try Backup.encrypt(try sample(), password: "correct horse", iterations: fast)
         XCTAssertThrowsError(try Backup.decrypt(file, password: "wrong horse")) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Sai mật khẩu, hoặc file sao lưu bị hỏng")
+            XCTAssertEqual(($0 as? OtpError)?.message, "Wrong password, or the backup file is damaged")
         }
         var json = try JSONSerialization.jsonObject(with: file) as! [String: Any]
         var box = Data(base64Encoded: json["data"] as! String)!
@@ -45,7 +45,7 @@ final class BackupTests: XCTestCase {
         let b = try Backup.encrypt(accounts, password: "correct horse", iterations: fast)
         XCTAssertNotEqual(a, b)
         XCTAssertThrowsError(try Backup.encrypt(accounts, password: "short", iterations: fast)) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "Mật khẩu cần ít nhất 8 ký tự")
+            XCTAssertEqual(($0 as? OtpError)?.message, "The password needs at least 8 characters")
         }
         XCTAssertGreaterThanOrEqual(Backup.defaultIterations, 600_000)
     }
@@ -54,7 +54,7 @@ final class BackupTests: XCTestCase {
         XCTAssertFalse(Backup.isEncrypted(Data(#"{"format":"2fa-auth","version":1,"accounts":[]}"#.utf8)))
         XCTAssertFalse(Backup.isEncrypted(Data("hello".utf8)))
         XCTAssertThrowsError(try Backup.decrypt(Data("hello".utf8), password: "correct horse")) {
-            XCTAssertEqual(($0 as? OtpError)?.message, "File này không phải file sao lưu của 2FA Auth")
+            XCTAssertEqual(($0 as? OtpError)?.message, "This is not a 2FA Auth backup file")
         }
     }
 }

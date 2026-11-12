@@ -3,6 +3,13 @@ import CryptoKit
 import Foundation
 
 /// An error whose message is safe to show: it never contains a key.
+/// A translated UI string: English is the source, `vi.lproj/Localizable.strings` holds Vietnamese.
+/// Looks in the app bundle, so the core module and the app share one strings file.
+public func L(_ key: String, _ args: CVarArg...) -> String {
+    let format = NSLocalizedString(key, bundle: .main, comment: "")
+    return args.isEmpty ? format : String(format: format, arguments: args)
+}
+
 public struct OtpError: LocalizedError, Equatable {
     public let message: String
     public init(_ message: String) { self.message = message }
@@ -30,15 +37,15 @@ public enum Base32 {
     /// The normalized secret, or an OtpError that is safe to show.
     public static func checkSecret(_ input: String) throws -> String {
         let s = normalize(input)
-        if s.isEmpty { throw OtpError("Chưa nhập khóa") }
-        if !isBase32(s) { throw OtpError("Khóa chỉ gồm chữ A–Z và số 2–7") }
-        if s.count < minSecretLength { throw OtpError("Khóa quá ngắn, cần ít nhất \(minSecretLength) ký tự") }
+        if s.isEmpty { throw OtpError(L("Enter a key")) }
+        if !isBase32(s) { throw OtpError(L("A key only has the letters A–Z and the digits 2–7")) }
+        if s.count < minSecretLength { throw OtpError(L("The key is too short; it needs at least %ld characters", minSecretLength)) }
         return s
     }
 
     public static func decode(_ input: String) throws -> Data {
         let s = normalize(input)
-        guard isBase32(s) else { throw OtpError("Khóa chỉ gồm chữ A–Z và số 2–7") }
+        guard isBase32(s) else { throw OtpError(L("A key only has the letters A–Z and the digits 2–7")) }
         var out = Data()
         var value = 0
         var bits = 0

@@ -8,9 +8,9 @@ final class DemoStorage: SecretStorage {
     init() {
         let book = try! AccountBook(storage: memory)
         let samples: [(String, String, String)] = [
-            ("GitHub", "alex@example.com", "Công việc"), ("Google", "alex@example.com", "Cá nhân"),
-            ("Binance", "alex.trader", "Tài chính"), ("AWS", "root@example.com", "Công việc"),
-            ("Zalo", "0901 234 567", "Cá nhân"), ("Okta", "alex@corp.example", "Công việc"),
+            ("GitHub", "alex@example.com", L("Work")), ("Google", "alex@example.com", L("Personal")),
+            ("Binance", "alex.trader", L("Finance")), ("AWS", "root@example.com", L("Work")),
+            ("Zalo", "0901 234 567", L("Personal")), ("Okta", "alex@corp.example", L("Work")),
         ]
         for (issuer, name, group) in samples {
             let key = (0..<20).map { _ in UInt8.random(in: 0...255) }

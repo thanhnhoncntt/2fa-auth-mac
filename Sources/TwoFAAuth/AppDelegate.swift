@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import SwiftUI
+import TwoFACore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -29,6 +30,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !window.setFrameUsingName("MainWindow") { window.center() }
         window.setFrameAutosaveName("MainWindow")
 
+        // For the optional lock: leaving the app starts the 5-minute timer; coming back or the screen locking checks it.
+        let center = NotificationCenter.default
+        center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.wentAway() }
+        }
+        center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.cameBack() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.lockNow() }
+        }
+        DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.model.lockNow() }
+        }
+
         NSApp.mainMenu = Self.mainMenu()
         addStatusItem()
         show()
@@ -40,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
     }
 
-    /// The menu bar icon: one click shows or hides the same window as the Dock icon.
+    /// The menu bar icon: a click shows or hides the window; a right-click (or ⌃-click) opens a short menu.
     private func addStatusItem() {
         // A new status item goes to the far left of the others, which on a full menu bar is behind the notch.
         // Start it at the right end instead, next to the clock; once the user ⌘-drags it, macOS keeps that spot.
@@ -54,11 +70,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: "2FA Auth")
             button.target = self
-            button.action = #selector(toggleFromStatusItem)
+            button.action = #selector(statusItemClicked)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
     }
 
-    @objc private func toggleFromStatusItem() { toggle() }
+    @objc private func statusItemClicked() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            showStatusMenu()
+        } else {
+            toggle()
+        }
+    }
+
+    private func showStatusMenu() {
+        let menu = NSMenu()
+        let header = NSMenuItem()
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let headerView = NSHostingView(rootView: StatusMenuHeader(version: version) { [weak self, weak menu] in
+            menu?.cancelTracking()
+            self?.show()
+        })
+        headerView.frame = NSRect(origin: .zero, size: headerView.fittingSize)
+        header.view = headerView
+        menu.addItem(header)
+        menu.addItem(.separator())
+
+        let scan = menu.addItem(withTitle: L("Scan QR Code on Screen"), action: #selector(scanFromMenu), keyEquivalent: "q")
+        scan.keyEquivalentModifierMask = [.option, .shift]
+        menu.addItem(withTitle: L("Enter Setup Key"), action: #selector(addKeyFromMenu), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: L("Back Up…"), action: #selector(backupFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: L("Restore…"), action: #selector(restoreFromMenu), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: L("Quit 2FA Auth"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        for item in menu.items where item.action != #selector(NSApplication.terminate(_:)) { item.target = self }
+
+        // Attach the menu only for this click, so a plain click keeps toggling the window.
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
 
     /// ⌥⇧A and the menu bar icon: bring the window up, or put it away when it is already in front.
     private func toggle() {
@@ -68,8 +121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func show() {
         model.willShow()
         NSApp.unhide(nil)
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        window.orderFrontRegardless()
+        window.makeKey()
+        // The plain activate() of macOS 14+ is only a request and was refused from the second click on while
+        // another app was in front, leaving the window behind it without keyboard focus.
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // Clicking the Dock icon (or opening the app again) brings the window back after it was closed.
@@ -91,35 +147,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let main = NSMenu()
 
         let app = NSMenu()
-        app.addItem(withTitle: "Giới thiệu 2FA Auth", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(withTitle: L("About 2FA Auth"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Ẩn 2FA Auth", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        app.addItem(withTitle: "Thoát 2FA Auth", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: L("Hide 2FA Auth"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: L("Quit 2FA Auth"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         main.addItem(submenu: app, title: "2FA Auth")
 
-        let account = NSMenu(title: "Tài khoản")
-        let scan = account.addItem(withTitle: "Quét mã QR trên màn hình", action: #selector(scanFromMenu), keyEquivalent: "q")
+        let account = NSMenu(title: L("Accounts"))
+        let scan = account.addItem(withTitle: L("Scan QR Code on Screen"), action: #selector(scanFromMenu), keyEquivalent: "q")
         scan.keyEquivalentModifierMask = [.option, .shift]
-        account.addItem(withTitle: "Nhập khóa thiết lập", action: #selector(addKeyFromMenu), keyEquivalent: "n")
+        account.addItem(withTitle: L("Enter Setup Key"), action: #selector(addKeyFromMenu), keyEquivalent: "n")
         account.addItem(.separator())
-        account.addItem(withTitle: "Sao lưu…", action: #selector(backupFromMenu), keyEquivalent: "s")
-        account.addItem(withTitle: "Khôi phục…", action: #selector(restoreFromMenu), keyEquivalent: "o")
-        main.addItem(submenu: account, title: "Tài khoản")
+        account.addItem(withTitle: L("Back Up…"), action: #selector(backupFromMenu), keyEquivalent: "s")
+        account.addItem(withTitle: L("Restore…"), action: #selector(restoreFromMenu), keyEquivalent: "o")
+        main.addItem(submenu: account, title: L("Accounts"))
 
-        let edit = NSMenu(title: "Sửa")
-        edit.addItem(withTitle: "Hoàn tác", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "Làm lại", action: Selector(("redo:")), keyEquivalent: "Z")
+        let edit = NSMenu(title: L("Edit"))
+        edit.addItem(withTitle: L("Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: L("Redo"), action: Selector(("redo:")), keyEquivalent: "Z")
         edit.addItem(.separator())
-        edit.addItem(withTitle: "Cắt", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Sao chép", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Dán", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Chọn tất cả", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        main.addItem(submenu: edit, title: "Sửa")
+        edit.addItem(withTitle: L("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        main.addItem(submenu: edit, title: L("Edit"))
 
-        let windowMenu = NSMenu(title: "Cửa sổ")
-        windowMenu.addItem(withTitle: "Thu nhỏ", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Đóng", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        main.addItem(submenu: windowMenu, title: "Cửa sổ")
+        let windowMenu = NSMenu(title: L("Window"))
+        windowMenu.addItem(withTitle: L("Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: L("Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        main.addItem(submenu: windowMenu, title: L("Window"))
         NSApp.windowsMenu = windowMenu
         return main
     }
@@ -132,3 +188,4 @@ private extension NSMenu {
         addItem(item)
     }
 }
+

@@ -17,7 +17,7 @@ struct KeychainStorage: SecretStorage {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw OtpError("Không đọc được Keychain (mã lỗi \(status))") }
+        guard status == errSecSuccess else { throw OtpError(L("Could not read the Keychain (error %ld)", Int(status))) }
         return result as? Data
     }
 
@@ -26,12 +26,12 @@ struct KeychainStorage: SecretStorage {
         if status == errSecItemNotFound {
             var add = item
             add[kSecValueData as String] = data
-            add[kSecAttrLabel as String] = "2FA Auth – tài khoản"
+            add[kSecAttrLabel as String] = "2FA Auth accounts"
             add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             let added = SecItemAdd(add as CFDictionary, nil)
-            guard added == errSecSuccess else { throw OtpError("Không lưu được vào Keychain (mã lỗi \(added))") }
+            guard added == errSecSuccess else { throw OtpError(L("Could not save to the Keychain (error %ld)", Int(added))) }
         } else if status != errSecSuccess {
-            throw OtpError("Không lưu được vào Keychain (mã lỗi \(status))")
+            throw OtpError(L("Could not save to the Keychain (error %ld)", Int(status)))
         }
     }
 }
