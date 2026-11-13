@@ -7,6 +7,25 @@ Phiên bản **0.2** · macOS 14 trở lên.
 App nhỏ có cửa sổ riêng và icon trên Dock, tạo mã 2FA như app Authenticator. Quét được mã QR ở **bất kỳ đâu
 trên màn hình**: mọi profile Chrome, Safari, Telegram, ảnh trong Preview...
 
+## Cài đặt
+
+1. Tải **2FA-Auth-0.2.zip** ở trang [Releases](https://github.com/thanhnhoncntt/2fa-auth-mac/releases/latest). Chạy được trên Mac chip Apple và Mac Intel, macOS 14 trở lên.
+2. Mở file zip (bấm đúp) rồi kéo **2FA Auth.app** vào thư mục **Applications** (Ứng dụng).
+3. Mở app. App chưa được Apple công chứng (notarize, việc này cần tài khoản developer trả phí), nên lần đầu macOS báo
+   không xác minh được "2FA Auth". Bấm **Xong**, rồi mở **Cài đặt hệ thống → Quyền riêng tư & Bảo mật**, kéo xuống dòng
+   *"2FA Auth" đã bị chặn*, bấm **Vẫn mở** và xác nhận bằng mật khẩu hoặc Touch ID. Chỉ cần làm một lần.
+
+   Hoặc trong Terminal: `xattr -dr com.apple.quarantine "/Applications/2FA Auth.app"`, rồi mở app như bình thường.
+4. Lần đầu quét mã QR, cho phép **Ghi màn hình** (xem bên dưới).
+
+**Cập nhật:** thoát app (⌘Q), thay app trong Applications bằng bản mới rồi mở lại. Tài khoản vẫn nằm trong Keychain;
+macOS có thể hỏi một lần cho 2FA Auth dùng chúng: bấm **Luôn cho phép**.
+
+**Gỡ cài đặt:** kéo app vào Thùng rác. Tài khoản vẫn nằm trong Keychain cho tới khi bạn xoá mục `local.twofa-auth`
+trong Truy cập Chuỗi khoá (Keychain Access).
+
+Có thể tự build từ mã nguồn (xem [Build](#build)).
+
 ## Dùng
 
 | Việc | Cách |
@@ -49,11 +68,13 @@ swift test                      # test: Base32, TOTP (RFC 4226/6238), otpauth, d
 ./scripts/build-app.sh          # tạo build/2FA Auth.app
 ./scripts/build-app.sh --install  # cài vào ~/Applications, mở lại, xoá bản build
 ./scripts/build-app.sh --zip      # đóng gói dist/2FA-Auth-<phiên bản>.zip
+./scripts/build-app.sh --release  # file zip để đăng Releases: chip Apple + Intel, ký ad-hoc
 ./scripts/build-app.sh && "build/2FA Auth.app/Contents/MacOS/TwoFAAuth" --demo  # thử giao diện với tài khoản giả, không đụng Keychain
 ```
 
 Icon app: `swift scripts/make-icon.swift . && iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns`.
 Script ký bằng chứng chỉ Apple Development nếu có, nên quyền Keychain và Ghi màn hình được giữ qua các lần build.
+`--release` luôn ký ad-hoc, vì tên chứng chỉ (thường là email Apple ID) sẽ nằm trong app.
 
 | Đường dẫn | Vai trò |
 |---|---|
