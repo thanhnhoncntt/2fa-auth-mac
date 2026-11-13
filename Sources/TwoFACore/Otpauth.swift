@@ -10,7 +10,7 @@ public enum Otpauth {
         let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = raw.lowercased()
         if lower.hasPrefix("otpauth-migration:") {
-            throw OtpError(L("This is a Google Authenticator transfer QR code, which is not supported yet"))
+            throw OtpError(L("This is a Google Authenticator export QR code with several accounts"))
         }
         guard lower.hasPrefix("otpauth://") else { throw OtpError(L("This QR code is not a 2FA code")) }
         // Some sites put raw spaces in the label.

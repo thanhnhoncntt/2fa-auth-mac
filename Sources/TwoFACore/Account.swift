@@ -10,9 +10,11 @@ public struct Account: Codable, Identifiable, Equatable, Sendable {
     public var digits: Int
     public var period: Int
     public var algorithm: Algorithm
+    /// The profile (separate account list) it belongs to; "" is the default profile.
+    public var profile: String
 
     public init(id: UUID = UUID(), issuer: String = "", name: String = "", group: String = "", secret: String,
-                digits: Int = 6, period: Int = 30, algorithm: Algorithm = .SHA1) {
+                digits: Int = 6, period: Int = 30, algorithm: Algorithm = .SHA1, profile: String = "") {
         self.id = id
         self.issuer = issuer
         self.name = name
@@ -21,6 +23,23 @@ public struct Account: Codable, Identifiable, Equatable, Sendable {
         self.digits = digits
         self.period = period
         self.algorithm = algorithm
+        self.profile = profile
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, issuer, name, group, secret, digits, period, algorithm, profile }
+
+    /// Lists and backups saved before profiles existed have no "profile": those accounts are in the default one.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        issuer = try c.decode(String.self, forKey: .issuer)
+        name = try c.decode(String.self, forKey: .name)
+        group = try c.decode(String.self, forKey: .group)
+        secret = try c.decode(String.self, forKey: .secret)
+        digits = try c.decode(Int.self, forKey: .digits)
+        period = try c.decode(Int.self, forKey: .period)
+        algorithm = try c.decode(Algorithm.self, forKey: .algorithm)
+        profile = try c.decodeIfPresent(String.self, forKey: .profile) ?? ""
     }
 
     /// "Google (alex@example.com)", or whichever of the two names exists.
@@ -55,9 +74,10 @@ public struct AccountDraft: Equatable, Sendable {
     public var digits: Int
     public var period: Int
     public var algorithm: Algorithm
+    public var profile: String
 
     public init(issuer: String = "", name: String = "", group: String = "", secret: String,
-                digits: Int = 6, period: Int = 30, algorithm: Algorithm = .SHA1) {
+                digits: Int = 6, period: Int = 30, algorithm: Algorithm = .SHA1, profile: String = "") {
         self.issuer = issuer
         self.name = name
         self.group = group
@@ -65,6 +85,7 @@ public struct AccountDraft: Equatable, Sendable {
         self.digits = digits
         self.period = period
         self.algorithm = algorithm
+        self.profile = profile
     }
 }
 

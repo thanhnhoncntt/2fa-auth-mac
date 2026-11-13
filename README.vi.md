@@ -12,7 +12,7 @@ Khóa nằm trong Keychain của máy, không lên mạng.
 
 ## Cài đặt
 
-1. Tải **2FA-Auth-0.2.zip** ở [Releases](https://github.com/thanhnhoncntt/2fa-auth-mac/releases/latest)
+1. Tải **2FA-Auth-0.3.zip** ở [Releases](https://github.com/thanhnhoncntt/2fa-auth-mac/releases/latest)
    (macOS 14+, chip Apple và Intel), kéo **2FA Auth.app** vào **Applications**.
 2. App chưa được Apple công chứng nên lần đầu bị chặn: bấm **Xong**, rồi
    **Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Vẫn mở**. Chỉ một lần.
@@ -23,8 +23,13 @@ Khóa nằm trong Keychain của máy, không lên mạng.
 
 - **⌥⇧A** hiện hoặc ẩn cửa sổ; **⌥⇧Q** quét mã QR (kéo khung quanh mã, `Esc` để huỷ).
 - Bấm vào dòng để copy mã, hoặc gõ để tìm rồi **Enter**. Clipboard tự xoá sau 30 giây.
+- **Profile** (⚙ Thiết lập → Profile): mỗi profile một danh sách tài khoản riêng, như profile Chrome. Đổi bằng menu
+  ở trên cùng hoặc ⌘1, ⌘2…; menu chỉ hiện khi có từ 2 profile.
 - Chuột phải vào dòng để sửa hoặc xoá; chuột phải vào icon trên thanh menu để mở menu nhanh.
-- Menu **⋯**: sao lưu và khôi phục có mã hoá, ngôn ngữ (English / Tiếng Việt), khoá Touch ID, mở khi đăng nhập.
+- **Chuyển từ app khác?** ⚙ Thiết lập → **Nhập từ file…** đọc file xuất từ extension Authenticator trên Chrome,
+  Aegis, 2FAS, andOTP, Bitwarden, Ente Auth và danh sách otpauth://. Với Google Authenticator, quét mã QR xuất tài khoản.
+- ⚙ Thiết lập còn có sao lưu có mật khẩu của riêng 2FA Auth (tất cả hoặc vài profile; khi khôi phục chọn profile nào
+  lấy lại và vào đâu, không xoá gì), ngôn ngữ, khoá Touch ID và mở khi đăng nhập.
 
 ## Build
 

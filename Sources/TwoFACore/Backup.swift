@@ -60,7 +60,7 @@ public enum Backup {
         }
         return payload.accounts.map {
             AccountDraft(issuer: $0.issuer, name: $0.name, group: $0.group, secret: $0.secret,
-                         digits: $0.digits, period: $0.period, algorithm: $0.algorithm)
+                         digits: $0.digits, period: $0.period, algorithm: $0.algorithm, profile: $0.profile)
         }
     }
 
@@ -75,5 +75,29 @@ public enum Backup {
         guard status == kCCSuccess else { throw OtpError(L("Could not derive a key from the password")) }
         defer { _ = key.withUnsafeMutableBytes { memset_s($0.baseAddress, $0.count, 0, $0.count) } }
         return SymmetricKey(data: key)
+    }
+}
+
+// MARK: choosing what to restore
+
+extension Backup {
+    /// The profiles in a decrypted backup with their account counts, in the order they first appear.
+    public static func profiles(in drafts: [AccountDraft]) -> [(name: String, count: Int)] {
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for draft in drafts {
+            if counts[draft.profile] == nil { order.append(draft.profile) }
+            counts[draft.profile, default: 0] += 1
+        }
+        return order.map { ($0, counts[$0]!) }
+    }
+
+    /// The accounts of the chosen profiles, each kept in its own profile, or all moved `into` one.
+    public static func pick(_ drafts: [AccountDraft], profiles: Set<String>, into target: String?) -> [AccountDraft] {
+        drafts.filter { profiles.contains($0.profile) }.map { draft in
+            var draft = draft
+            if let target { draft.profile = target }
+            return draft
+        }
     }
 }

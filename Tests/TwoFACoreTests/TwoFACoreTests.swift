@@ -96,7 +96,7 @@ final class OtpauthTests: XCTestCase {
         let secret = randomSecret()
         let cases: [(String, String)] = [
             ("https://example.com", "This QR code is not a 2FA code"),
-            ("otpauth-migration://offline?data=abc", "This is a Google Authenticator transfer QR code, which is not supported yet"),
+            ("otpauth-migration://offline?data=abc", "This is a Google Authenticator export QR code with several accounts"),
             ("otpauth://hotp/x?secret=\(secret)&counter=1", "Counter-based codes (HOTP) are not supported, only time-based ones"),
             ("otpauth://totp/x?secret=\(secret)&digits=9", "This 2FA QR code uses an unsupported number of digits, period or algorithm"),
             ("otpauth://totp/x?secret=\(secret)&algorithm=MD5", "This 2FA QR code uses an unsupported number of digits, period or algorithm"),

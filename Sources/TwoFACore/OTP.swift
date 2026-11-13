@@ -60,6 +60,24 @@ public enum Base32 {
         }
         return out
     }
+
+    /// Raw key bytes to Base32 without padding, for apps that store keys as bytes (Google Authenticator exports).
+    public static func encode(_ data: Data) -> String {
+        var out = ""
+        var value = 0
+        var bits = 0
+        for byte in data {
+            value = (value << 8) | Int(byte)
+            bits += 8
+            while bits >= 5 {
+                bits -= 5
+                out.append(alphabet[(value >> bits) & 31])
+            }
+            value &= (1 << bits) - 1
+        }
+        if bits > 0 { out.append(alphabet[(value << (5 - bits)) & 31]) }
+        return out
+    }
 }
 
 public enum OTP {

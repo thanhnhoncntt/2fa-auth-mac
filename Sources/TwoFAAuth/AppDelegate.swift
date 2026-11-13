@@ -9,6 +9,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var model: AppModel!
     private var hotKeys: HotKeys?
+    /// `--no-activate` (for screenshots): windows open behind the others and never take the keyboard.
+    private let quiet = CommandLine.arguments.contains("--no-activate")
+
+    /// The Settings window (⌘,), made on first use.
+    private lazy var settingsWindow: NSWindow = {
+        let settings = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 640),
+                                styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        settings.title = L("Settings")
+        settings.isReleasedWhenClosed = false
+        settings.contentViewController = NSHostingController(rootView: SettingsView().environment(model))
+        settings.setContentSize(NSSize(width: 440, height: 640))
+        if !settings.setFrameUsingName("SettingsWindow") { settings.center() }
+        settings.setFrameAutosaveName("SettingsWindow")
+        return settings
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // `--demo` runs on made-up accounts in memory, never touching the Keychain (for trying out the UI).
@@ -16,15 +31,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.showWindow = { [weak self] in self?.show() }
         // Out of the way while the user picks a QR region, without quitting.
         model.hideWindow = { NSApp.hide(nil) }
+        model.openSettingsWindow = { [weak self] in self?.showSettings() }
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 520),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         window.title = "2FA Auth"
+        // The buttons live in the real window toolbar (SwiftUI's .toolbar, bridged); the title is left out for room.
+        window.titleVisibility = .hidden
+        window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 320, height: 420)
-        let content = NSHostingController(rootView: ContentView().environmentObject(model))
+        let content = NSHostingController(rootView: ContentView().environment(model))
         content.sizingOptions = [] // keep the window's own size instead of shrinking to the SwiftUI minimum
+        content.sceneBridgingOptions = [.toolbars]
         window.contentViewController = content
         window.setContentSize(NSSize(width: 360, height: 520))
         if !window.setFrameUsingName("MainWindow") { window.center() }
@@ -47,13 +67,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = Self.mainMenu()
         addStatusItem()
-        show()
+        if CommandLine.arguments.contains("--demo"), let screen = Self.argument("--demo-screen") {
+            model.showDemoScreen(screen)
+        }
+        if quiet { window.orderBack(nil) } else { show() }
 
         let optionShift = optionKey | shiftKey
         hotKeys = HotKeys([
             .init(keyCode: kVK_ANSI_A, modifiers: optionShift) { [weak self] in self?.toggle() },
             .init(keyCode: kVK_ANSI_Q, modifiers: optionShift) { [weak self] in self?.model.scanScreen() },
         ])
+    }
+
+    private static func argument(_ name: String) -> String? {
+        CommandLine.arguments.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) }
     }
 
     /// The menu bar icon: a click shows or hides the window; a right-click (or ⌃-click) opens a short menu.
@@ -101,8 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scan.keyEquivalentModifierMask = [.option, .shift]
         menu.addItem(withTitle: L("Enter Setup Key"), action: #selector(addKeyFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: L("Back Up…"), action: #selector(backupFromMenu), keyEquivalent: "")
-        menu.addItem(withTitle: L("Restore…"), action: #selector(restoreFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: L("Settings…"), action: #selector(settingsFromMenu), keyEquivalent: ",")
         menu.addItem(.separator())
         menu.addItem(withTitle: L("Quit 2FA Auth"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         for item in menu.items where item.action != #selector(NSApplication.terminate(_:)) { item.target = self }
@@ -118,7 +144,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if NSApp.isActive && window.isVisible && window.isKeyWindow { NSApp.hide(nil) } else { show() }
     }
 
+    private func showSettings() {
+        if quiet { settingsWindow.orderBack(nil); return }
+        NSApp.unhide(nil)
+        settingsWindow.orderFrontRegardless()
+        settingsWindow.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func show() {
+        if quiet { window.orderBack(nil); return }
         model.willShow()
         NSApp.unhide(nil)
         window.orderFrontRegardless()
@@ -139,8 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func scanFromMenu() { model.scanScreen() }
     @objc private func addKeyFromMenu() { show(); model.startAdd() }
-    @objc private func backupFromMenu() { show(); model.startBackup() }
-    @objc private func restoreFromMenu() { show(); model.startRestore() }
+    @objc private func settingsFromMenu() { model.openSettings() }
 
     /// A standard app menu; the Edit menu is what makes ⌘C / ⌘V / ⌘A work in the text fields.
     private static func mainMenu() -> NSMenu {
@@ -148,6 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let app = NSMenu()
         app.addItem(withTitle: L("About 2FA Auth"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(.separator())
+        app.addItem(withTitle: L("Settings…"), action: #selector(settingsFromMenu), keyEquivalent: ",")
         app.addItem(.separator())
         app.addItem(withTitle: L("Hide 2FA Auth"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: L("Quit 2FA Auth"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -157,9 +193,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let scan = account.addItem(withTitle: L("Scan QR Code on Screen"), action: #selector(scanFromMenu), keyEquivalent: "q")
         scan.keyEquivalentModifierMask = [.option, .shift]
         account.addItem(withTitle: L("Enter Setup Key"), action: #selector(addKeyFromMenu), keyEquivalent: "n")
-        account.addItem(.separator())
-        account.addItem(withTitle: L("Back Up…"), action: #selector(backupFromMenu), keyEquivalent: "s")
-        account.addItem(withTitle: L("Restore…"), action: #selector(restoreFromMenu), keyEquivalent: "o")
         main.addItem(submenu: account, title: L("Accounts"))
 
         let edit = NSMenu(title: L("Edit"))

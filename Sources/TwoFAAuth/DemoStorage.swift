@@ -12,25 +12,22 @@ final class DemoStorage: SecretStorage {
             ("Binance", "alex.trader", L("Finance")), ("AWS", "root@example.com", L("Work")),
             ("Zalo", "0901 234 567", L("Personal")), ("Okta", "alex@corp.example", L("Work")),
         ]
-        for (issuer, name, group) in samples {
-            let key = (0..<20).map { _ in UInt8.random(in: 0...255) }
-            _ = try? book.add(AccountDraft(issuer: issuer, name: name, group: group, secret: Self.base32(key)))
+        for (issuer, name, group) in samples { _ = try? book.add(Self.draft(issuer, name, group)) }
+        // `--demo-profiles` adds two more profiles, to try the profile switcher.
+        if CommandLine.arguments.contains("--demo-profiles") {
+            _ = try? book.addProfile("Acme Corp")
+            _ = try? book.addProfile("Client B")
+            _ = try? book.add(Self.draft("Jira", "alex@acme.example", "", profile: "Acme Corp"))
+            _ = try? book.add(Self.draft("Slack", "alex@acme.example", "", profile: "Acme Corp"))
+            _ = try? book.add(Self.draft("Shopify", "admin@clientb.example", "", profile: "Client B"))
         }
+    }
+
+    private static func draft(_ issuer: String, _ name: String, _ group: String, profile: String = "") -> AccountDraft {
+        let key = Data((0..<20).map { _ in UInt8.random(in: 0...255) })
+        return AccountDraft(issuer: issuer, name: name, group: group, secret: Base32.encode(key), profile: profile)
     }
 
     func load() throws -> Data? { try memory.load() }
     func save(_ data: Data) throws { try memory.save(data) }
-
-    private static func base32(_ bytes: [UInt8]) -> String {
-        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
-        var out = "", value = 0, bits = 0
-        for byte in bytes {
-            value = (value << 8) | Int(byte)
-            bits += 8
-            while bits >= 5 { bits -= 5; out.append(alphabet[(value >> bits) & 31]) }
-            value &= (1 << bits) - 1
-        }
-        if bits > 0 { out.append(alphabet[(value << (5 - bits)) & 31]) }
-        return out
-    }
 }
